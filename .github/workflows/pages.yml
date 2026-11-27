@@ -1,0 +1,47 @@
+name: Church website
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 23 * * 0' # Monday at 08:00 in Seoul
+
+concurrency:
+  group: church-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/configure-pages@v5
+      - name: Refresh Sunday sermon
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          python3 scripts/update_sermon.py
+          if ! git diff --quiet -- index.html; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add index.html
+            git commit -m "Update featured Sunday service"
+            git push
+          fi
+      - name: Collect website files
+        run: |
+          mkdir public
+          cp -R index.html news.html css js assets public/
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4
